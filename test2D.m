@@ -48,14 +48,6 @@
 % 目的: 测试 FE_solver_2D_poisson 的各向异性功能 (a=2)
 % 物理方程: -div(C * grad(u)) = f
 
-
-
-
-
-
-
-
-
 clear; clc; close all;
 
 % === 1. 定义各项异性系数矩阵 C ===
@@ -67,14 +59,10 @@ c_struct.c12 = @(x,y) 1.0 + 0*x; % 交叉项 c12
 c_struct.c21 = @(x,y) 1.0 + 0*x; % 交叉项 c21
 c_struct.c22 = @(x,y) 2.0 + 0*x;
 
-
-
-
-
 % === 2. 定义解析解 u (用于验证) ===
 % u = sin(pi*x) * sin(pi*y)
+u_exact_handle = @(x,y) sin(pi*x) .* sin(pi*y);
 
-u_handle = @function_u;
 % === 3. 推导对应的源项 f ===
 % 理论推导: f = -div(C * grad u)
 % 对于常数矩阵 C，展开为: - ( c11*u_xx + (c12+c21)*u_xy + c22*u_yy )
@@ -95,7 +83,7 @@ f_handle = @(x,y) (4 * pi^2) * (sin(pi*x).*sin(pi*y)) ...
 % 四周设为 Dirichlet，值取解析解的值 (即 0)
 bc_flags = [-1, -1, -1, -1]; 
 
-bc_funcs.dirichlet = u_handle; 
+bc_funcs.dirichlet = u_exact_handle; 
 % 占位防止报错
 bc_funcs.bottom = @(x,y) 0; bc_funcs.right = @(x,y) 0;
 bc_funcs.top    = @(x,y) 0; bc_funcs.left  = @(x,y) 0;
@@ -116,7 +104,7 @@ fprintf('开始各向异性测试 (a=2)...\n');
                                         trial_type, test_type, ...
                                         gauss_type, bc_flags, ...
                                         f_handle, c_struct, ...   % 传入结构体
-                                        bc_funcs, u_handle, ...
+                                        bc_funcs, u_exact_handle, ...
                                         2);                       % <--- a=2 (各向异性)
 
 % === 7. 结果可视化 ===
