@@ -1,0 +1,115 @@
+
+% %H1半范数
+% % 计算 x 方向导数误差 (alpha1=1, alpha2=0)
+% % 注意: 传入的 handle 必须是解析解对 x 的导数 u_x(x,y)
+% err_H1_x = compute_L2_error_2D(solution, P_mesh, T_mesh, P_trial, T_trial, ...
+%                                trial_basis_type, analytical_ux_handle, 1, 0);
+% 
+% % 计算 y 方向导数误差 (alpha1=0, alpha2=1)
+% err_H1_y = compute_L2_error_2D(solution, P_mesh, T_mesh, P_trial, T_trial, ...
+%                                trial_basis_type, analytical_uy_handle, 0, 1);
+% 
+% % H1 半范数 = sqrt(err_x^2 + err_y^2)
+% err_H1 = sqrt(err_H1_x^2 + err_H1_y^2);
+
+
+% %  误差分析 ——无穷范
+% if ~isempty(analytical_u_handle)
+%     % 获取所有有限元节点坐标
+%     x_nodes = P_trial(1, :);
+%     y_nodes = P_trial(2, :);
+% 
+%     % 计算解析解在节点处的值
+%     u_exact = analytical_u_handle(x_nodes, y_nodes);
+% 
+%     % 计算无穷范数误差: max(|u_num - u_exact|)
+%     % 注意: solution通常是列向量, u_exact需转为列向量以匹配
+%     err_L_inf = max(abs(solution(:) - u_exact(:)));
+% 
+% else
+%     err_L_inf = NaN;
+% end
+function [solution, err_L2, P_trial, T_trial] = FE_solver_2D_poisson(x_range, y_range, N_x, N_y, ...
+                                                                        trial_basis_type, test_basis_type, ...
+                                                                        gauss_type, bc_flags, ...
+                                                                        f_input, c_input, ...
+                                                                        bc_funcs, u_exact_input)
+% FE_SOLVER_2D_POISSON 二维泊松方程有限元求解器
+%
+% 输入:
+%   f_input, c_input: 外面传进来的函数句柄 (@func) 或文件名字符串
+%   bc_funcs: 边界函数结构体
+%   u_exact_input: 解析解句柄
+
+    %  1. 网格生成
+    [P_mesh, T_mesh, P_trial, T_trial] = generate_PbTb(x_range, y_range, N_x, N_y, trial_basis_type);
+    [~, ~, P_test, T_test] = generate_PbTb(x_range, y_range, N_x, N_y, test_basis_type);
+    
+    N_test_dofs = size(P_test, 2);
+    N_trial_dofs = size(P_trial, 2);
+    matrix_size = [N_test_dofs, N_trial_dofs];
+
+    % --- 2. 组装刚度矩阵 A ---
+    % 直接使用输入的 c_input
+    A_xx = assemble_matrix_2D(matrix_size, gauss_type, c_input, ...
+                              P_mesh, T_mesh, T_trial, T_test, ...
+                              trial_basis_type, 1, 0, ... % Trial d/dx
+                              test_basis_type,  1, 0);    % Test  d/dx
+
+    A_yy = assemble_matrix_2D(matrix_size, gauss_type, c_input, ...
+                              P_mesh, T_mesh, T_trial, T_test, ...
+                              trial_basis_type, 0, 1, ... % Trial d/dy
+                              test_basis_type,  0, 1);    % Test  d/dy
+    A = A_xx + A_yy;
+
+    % 3. 组装载荷向量 b
+    % 直接使用输入的 f_input
+    b = assemble_vector_2D(N_test_dofs, gauss_type, f_input, ...
+                           P_mesh, T_mesh, T_test, ...
+                           test_basis_type, 0, 0);
+
+    %4. 处理 Neumann 边界
+    if any(bc_flags == -2)
+        b = assemble_neumann_vector(b, P_mesh, T_mesh, P_test, T_test, ...
+                                    test_basis_type, bc_flags, bc_funcs);
+    end
+
+    %5. 处理 Robin 边界
+    if any(bc_flags == -3)
+        % 处理左端项 q (修改 A)
+        if isfield(bc_funcs, 'robin_q')
+            A = assemble_robin_matrix(A, P_mesh, T_mesh, P_trial, T_trial, P_test, T_test, ...
+                                      trial_basis_type, test_basis_type, bc_flags, bc_funcs.robin_q);
+        end
+        % 处理右端项 g (修改 b)
+        b = assemble_neumann_vector(b, P_mesh, T_mesh, P_test, T_test, ...
+                                    test_basis_type, bc_flags, bc_funcs);
+    end
+
+    % --- 6. 处理 Dirichlet 边界 ---
+    boundary_nodes = boundarynodes_2D(P_trial, bc_flags);
+    [A, b] = BC_process_2D(A, b, boundary_nodes, P_trial, bc_funcs);
+
+    % --- 7. 求解 ---
+    solution = A \ b;
+
+    % --- 8. 误差计算 ---
+    if ~isempty(u_exact_input)
+        err_L2 = compute_L2_error_2D(solution, P_mesh, T_mesh, P_trial, T_trial, ...
+                                     trial_basis_type, u_exact_input, 0, 0);
+    else
+        err_L2 = NaN;
+    end
+
+    %  9. 绘图 
+    % 
+    figure('Name', 'FEM 2D Poisson Result');
+    trisurf(T_trial(1:3,:)', P_trial(1,:), P_trial(2,:), full(solution), ...
+            'EdgeColor', 'interp', 'FaceColor', 'interp');
+    
+    title({['Solution (Type ', num2str(trial_basis_type), ')'], ...
+           ['Grid: ', num2str(N_x), 'x', num2str(N_y), ', L2 Error: ', num2str(err_L2, '%0.4e')]});
+    xlabel('x'); ylabel('y'); zlabel('u');
+    colorbar; axis equal; view(3);
+
+end
