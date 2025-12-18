@@ -96,6 +96,7 @@ elseif basis_type==202%二次元6个基函数
             d2_val_d_hat_x2 = 0; d2_val_d_hat_y2 = -8; d2_val_d_hat_xy = -4;
        otherwise
            error('二次元六个基函数')
+   end
 end
 %以下分析导数，将参考坐标系映射回物理坐标系
 if basis_der_x == 0 && basis_der_y == 0
@@ -127,4 +128,3 @@ else
 end
 end
 
-end
