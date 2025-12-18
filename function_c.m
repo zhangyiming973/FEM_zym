@@ -1,5 +1,4 @@
-function val = function_c(x, y)
-    % 这里定义 c(x,y)
-    % 必须支持向量化操作 (x, y 可能是数组)
-    val = 1.0 + 0*x+0*y; 
-end
+function result=function_c(x)
+%为c写接口，方便修改c(x)表达式。
+%c(x)
+result=exp(x);
